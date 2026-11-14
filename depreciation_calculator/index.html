@@ -1,0 +1,469 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Car Depreciation Tracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Space+Grotesk:wght@500;600;700&display=swap">
+<style>
+/* Layout: one narrow column. Search first, then filters, a one-sentence verdict, bar chart, year table, paste-in box and notes. */
+:root {
+  --bg: #f3f6f7;
+  --surface: #ffffff;
+  --fg: #14212a;
+  --muted: #566772;
+  --line: #d8e0e4;
+  --accent: #0a6c87;
+  --accent-soft: #d9edf3;
+  --loss: #b3432b;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-head: "Space Grotesk", "Inter", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e171c; --surface: #152229; --fg: #e6edf0; --muted: #94a6b0; --line: #26373f;
+    --accent: #5cc0dc; --accent-soft: #1b3944; --loss: #f09175; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e171c; --surface: #152229; --fg: #e6edf0; --muted: #94a6b0; --line: #26373f;
+  --accent: #5cc0dc; --accent-soft: #1b3944; --loss: #f09175; color-scheme: dark;
+}
+body {
+  background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 28px 48px;
+}
+.wrap { max-width: 920px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.stack { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+h1, h2 { font-family: var(--font-head); text-wrap: balance; margin: 0; letter-spacing: -0.01em; }
+h1 { font-size: 30px; line-height: 1.15; }
+h2 { font-size: 18px; }
+p { margin: 0; }
+.muted { color: var(--muted); }
+.num { font-variant-numeric: tabular-nums; }
+header { display: flex; flex-direction: column; gap: 8px; }
+.sub { color: var(--muted); max-width: 62ch; }
+.stamp { display: inline-block; font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); font-weight: 600; }
+
+.search { display: flex; flex-direction: column; gap: 10px; }
+.searchrow { display: flex; gap: 8px; }
+.searchrow input { flex: 1; min-width: 0; font: inherit; font-size: 17px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); color: var(--fg); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+.chip { font: inherit; font-size: 13px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: 999px; padding: 4px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--accent); color: var(--accent); font-weight: 600; }
+
+.controls { display: flex; flex-wrap: wrap; gap: 16px 24px; align-items: flex-end; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.ctl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ctl > span, .ctl > label.t { font-size: 12px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { font: inherit; font-size: 14px; background: transparent; color: var(--fg); border: 0; padding: 7px 14px; cursor: pointer; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent); color: var(--bg); font-weight: 600; }
+.seg button:focus-visible, .btn:focus-visible, .chip:focus-visible, input:focus-visible, textarea:focus-visible, summary:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chk { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; min-height: 34px; }
+.chk input { width: 16px; height: 16px; accent-color: var(--accent); }
+input[type="number"] { font: inherit; width: 70px; padding: 6px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); }
+
+.verdict { font-size: 17px; line-height: 1.45; max-width: 66ch; }
+.verdict b { font-family: var(--font-head); font-weight: 600; }
+.loss { color: var(--loss); }
+a { color: var(--accent); }
+
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px; display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.chart { width: 100%; height: auto; display: block; }
+.chart .grid { stroke: var(--line); stroke-width: 1; fill: none; }
+.chart .bar { fill: var(--accent); }
+.chart .bar.few { fill: var(--accent-soft); stroke: var(--accent); stroke-width: 1; stroke-dasharray: 3 3; }
+.chart .ax { fill: var(--muted); font-size: 11px; font-family: var(--font-body); }
+.chart .val { fill: var(--fg); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
+.chart .yr { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: var(--font-head); }
+.chart .chg { fill: var(--loss); font-size: 11px; font-weight: 600; font-family: var(--font-body); }
+
+.tablewrap { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; min-width: 640px; font-variant-numeric: tabular-nums; }
+th, td { text-align: right; padding: 9px 10px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+th:first-child, td:first-child { text-align: left; }
+th { font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+td.yr { font-family: var(--font-head); font-weight: 600; font-size: 16px; }
+tr.few td { color: var(--muted); }
+.tag { font-size: 11px; border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: 8px; color: var(--muted); font-family: var(--font-body); font-weight: 500; }
+.drop { color: var(--loss); font-weight: 600; }
+.small { font-size: 13px; }
+
+textarea { font: inherit; font-size: 14px; width: 100%; min-height: 96px; resize: vertical; padding: 10px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); color: var(--fg); box-sizing: border-box; }
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn { font: inherit; font-size: 14px; font-weight: 600; background: var(--accent); color: var(--bg); border: 0; border-radius: 8px; padding: 8px 16px; cursor: pointer; text-decoration: none; display: inline-block; }
+.btn.ghost { background: transparent; color: var(--fg); border: 1px solid var(--line); font-weight: 500; }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 12px 16px; }
+summary { cursor: pointer; font-family: var(--font-head); font-weight: 600; }
+details .tablewrap { margin-top: 10px; max-height: 420px; overflow-y: auto; }
+ul.notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+@media (max-width: 520px) { h1 { font-size: 25px; } .verdict { font-size: 16px; } }
+@media (prefers-reduced-motion: no-preference) { .bar { transition: height .2s, y .2s; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="stamp" id="stamp"></span>
+    <h1 id="h1">Car depreciation tracker</h1>
+    <p class="sub">Asking prices from Mudah.my grouped by manufacture year. Each row shows how far the average sits below the next newer year.</p>
+  </header>
+
+  <form class="search" id="sform" role="search">
+    <div class="searchrow">
+      <input type="search" id="q" list="models" value="Lexus RX300" placeholder="Type a model, for example Lexus RX300" aria-label="Search a car model" autocomplete="off">
+      <button class="btn" type="submit">Search</button>
+    </div>
+    <div class="chips" id="chips"></div>
+    <p class="small muted" id="searchStatus" aria-live="polite">Search a model to load the latest available listings.</p>
+  </form>
+
+  <section class="panel" id="nodata" hidden aria-live="polite">
+    <h2 id="ndh"></h2>
+    <p class="small muted">No saved listings are available for this model yet. The app will try its connected listing-data provider automatically. If the provider is not configured or returns no results, you can still paste listings below.</p>
+    <div class="row"><a class="btn" id="mlink" target="_blank" rel="noopener" href="https://www.mudah.my/malaysia/cars-for-sale">Open Mudah.my cars</a></div>
+  </section>
+
+  <div class="stack" id="results">
+    <section class="controls" aria-label="Filters">
+      <div class="ctl"><span id="lc">Condition</span>
+        <div class="seg" role="group" aria-labelledby="lc" id="cond">
+          <button type="button" data-v="all" aria-pressed="true">All</button>
+          <button type="button" data-v="U" aria-pressed="false">Used</button>
+          <button type="button" data-v="R" aria-pressed="false">Recon</button>
+        </div></div>
+      <div class="ctl"><span id="lb">Price measure</span>
+        <div class="seg" role="group" aria-labelledby="lb" id="basis">
+          <button type="button" data-v="mean" aria-pressed="true">Average</button>
+          <button type="button" data-v="median" aria-pressed="false">Median</button>
+        </div></div>
+      <div class="ctl"><label class="t" for="min">Min listings a year</label><input type="number" id="min" value="5" min="1" max="50"></div>
+      <div class="ctl"><span>&nbsp;</span><label class="chk"><input type="checkbox" id="excl" checked> Drop price outliers</label></div>
+    </section>
+
+    <p class="verdict" id="verdict" aria-live="polite"></p>
+
+    <section class="panel" aria-label="Average price by year">
+      <h2 id="ctitle">Average asking price by manufacture year</h2>
+      <svg class="chart" id="chart" viewBox="0 0 640 300" role="img" aria-labelledby="ctitle"></svg>
+    </section>
+
+    <section class="panel" aria-label="Year by year table">
+      <h2>Year-by-year depreciation</h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Year</th><th>Age</th><th>Listings</th><th id="pcol">Average price</th><th>Avg km</th><th>Change vs newer</th><th>%</th></tr></thead>
+          <tbody id="tbody"></tbody>
+        </table>
+      </div>
+      <p class="small muted" id="tnote"></p>
+    </section>
+
+    <details>
+      <summary id="lsum">All listings in the dataset</summary>
+      <div class="tablewrap"><table style="min-width:420px"><thead><tr><th>Year</th><th>Type</th><th>Price</th><th>Mileage (mid)</th><th>Used in average</th></tr></thead><tbody id="lbody"></tbody></table></div>
+    </details>
+  </div>
+
+  <section class="panel" aria-label="Add listings">
+    <h2 id="addh">Add listings you find</h2>
+    <p class="small muted">Copy listing lines from Mudah.my and paste them here, one per line. Each line needs a year and a price, for example <span class="num">2021 Lexus RX300 F Sport RM 205,000</span> or <span class="num">2020 188000</span>. Rows go to the model currently searched and are kept in this browser.</p>
+    <textarea id="paste" aria-label="Listing lines" placeholder="2021 Lexus RX300 2.0 F SPORT RM 205,000&#10;2019 Lexus RX300 2.0 LUXURY RM 169,800"></textarea>
+    <div class="row">
+      <button class="btn" id="add" type="button">Add to the dataset</button>
+      <button class="btn ghost" id="clear" type="button">Remove added rows</button>
+      <span class="small muted" id="msg" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <section class="panel" aria-label="Notes on the data">
+    <h2>How to read this</h2>
+    <ul class="notes small" id="notes"></ul>
+  </section>
+</div>
+<datalist id="models"></datalist>
+
+<script>
+const BUILTIN = {
+  rx300: {
+    label: 'Lexus RX300', alias: ['rx300', 'lexusrx300'], snapshot: '14 Nov 2026',
+    live: { 2018: 34, 2019: 17, 2020: 37, 2021: 133, 2022: 131, 2023: 1 },
+    notes: [
+      'Source: the Lexus RX 300 year pages on Mudah.my, read on 14 Nov 2026.',
+      'Coverage: 2018, 2019 and 2020 are every live listing (34, 17 and 37). For 2021 and 2022 the page showed about 40 of 133 and 39 of 131, so those two averages come from a third of the stock.',
+      'Almost all 2021 and 2022 listings are recon, while most 2018 and 2019 listings are locally registered used cars, so the All view mixes two markets. Use the Condition buttons to compare like with like.',
+      'The lone 2023 listing is one used car and says nothing about 2023 prices. Three 2020 listings at RM 352,000 to 358,000 look like entry errors and are dropped as outliers.'
+    ],
+    rows: [[2018,"U",137999,92.5],[2018,"U",147999,77.5],[2018,"U",146800,67.5],[2018,"U",141800,62.5],[2018,"U",139800,105.0],[2018,"U",146700,92.5],[2018,"U",146700,97.5],[2018,"U",188888,42.5],[2018,"U",135800,165.0],[2018,"U",148800,97.5],[2018,"U",152800,62.5],[2018,"U",145800,97.5],[2018,"U",146800,92.5],[2018,"U",149800,92.5],[2018,"U",160000,77.5],[2018,"U",136700,52.5],[2018,"U",146777,72.5],[2018,"R",188000,22.5],[2018,"U",129999,82.5],[2018,"R",152000,87.5],[2018,"U",165800,105.0],[2018,"U",188888,42.5],[2018,"U",138800,87.5],[2018,"U",146777,82.5],[2018,"U",148800,92.5],[2018,"U",149000,62.5],[2018,"U",146777,82.5],[2018,"U",149800,92.5],[2018,"U",149900,125.0],[2018,"U",168800,72.5],[2018,"U",172800,72.5],[2018,"U",179800,62.5],[2018,"U",159800,57.5],[2018,"U",158888,115.0],[2019,"U",174900,72.5],[2019,"U",159800,62.5],[2019,"U",159800,62.5],[2019,"U",165999,67.5],[2019,"U",165888,105.0],[2019,"U",169800,87.5],[2019,"U",130800,125.0],[2019,"U",174999,105.0],[2019,"U",178000,82.5],[2019,"U",168800,87.5],[2019,"U",174800,97.5],[2019,"U",163800,115.0],[2019,"U",168800,82.5],[2019,"U",173800,67.5],[2019,"U",173800,67.5],[2019,"U",176800,67.5],[2019,"U",183800,57.5],[2020,"R",204800,37.5],[2020,"U",184999,52.5],[2020,"U",162999,77.5],[2020,"R",209800,32.5],[2020,"U",190000,67.5],[2020,"U",195999,52.5],[2020,"U",172800,82.5],[2020,"R",195000,37.5],[2020,"U",150000,67.5],[2020,"R",198000,47.5],[2020,"R",198000,47.5],[2020,"R",198000,37.5],[2020,"R",198000,47.5],[2020,"U",175000,47.5],[2020,"R",188000,27.5],[2020,"U",189999,57.5],[2020,"U",178000,42.5],[2020,"U",185800,57.5],[2020,"R",228000,32.5],[2020,"U",165000,52.5],[2020,"U",183800,82.5],[2020,"U",185700,57.5],[2020,"U",190000,42.5],[2020,"U",198800,62.5],[2020,"R",184000,87.5],[2020,"R",196800,37.5],[2020,"R",200000,37.5],[2020,"R",195000,62.5],[2020,"R",209800,52.5],[2020,"R",189000,87.5],[2020,"R",203000,37.5],[2020,"U",358000,57.5],[2020,"U",355999,52.5],[2020,"U",352000,42.5],[2020,"R",198000,47.5],[2020,"R",198000,47.5],[2020,"R",195000,62.5],[2021,"?",222800,27.5],[2021,"R",226000,47.5],[2021,"?",228888,32.5],[2021,"R",228000,12.5],[2021,"U",193700,52.5],[2021,"R",217000,52.5],[2021,"R",209000,22.5],[2021,"R",214000,37.5],[2021,"R",200000,67.5],[2021,"R",210800,42.5],[2021,"R",210800,57.5],[2021,"R",200800,62.5],[2021,"R",199900,37.5],[2021,"R",199900,37.5],[2021,"U",179800,72.5],[2021,"R",218000,27.5],[2021,"R",190000,47.5],[2021,"R",205000,62.5],[2021,"U",169999,105.0],[2021,"R",192000,37.5],[2021,"R",214000,37.5],[2021,"R",210000,42.5],[2021,"R",203800,32.5],[2021,"R",196000,52.5],[2021,"R",232000,12.5],[2021,"U",210800,82.5],[2021,"R",213000,27.5],[2021,"R",218000,27.5],[2021,"R",205000,82.5],[2021,"R",205000,67.5],[2021,"R",204777,42.5],[2021,"R",228000,12.5],[2021,"R",205000,62.5],[2021,"U",183800,87.5],[2021,"U",195000,42.5],[2021,"R",203888,57.5],[2021,"R",229888,27.5],[2021,"R",190000,42.5],[2021,"R",229888,27.5],[2021,"R",192000,37.5],[2021,"R",217000,17.5],[2022,"R",229000,42.5],[2022,"R",209000,47.5],[2022,"R",215000,37.5],[2022,"R",238000,27.5],[2022,"R",240000,22.5],[2022,"R",207000,62.5],[2022,"R",243000,17.5],[2022,"R",243000,17.5],[2022,"R",232000,27.5],[2022,"R",243000,17.5],[2022,"R",225000,42.5],[2022,"R",207000,22.5],[2022,"R",239800,12.5],[2022,"R",225000,12.5],[2022,"R",233000,27.5],[2022,"R",235000,32.5],[2022,"R",209000,27.5],[2022,"R",243000,17.5],[2022,"R",243000,17.5],[2022,"R",243000,17.5],[2022,"R",209000,27.5],[2022,"U",194800,67.5],[2022,"R",239001,22.5],[2022,"R",198000,42.5],[2022,"R",240000,7.5],[2022,"R",240000,27.5],[2022,"R",248000,27.5],[2022,"R",216900,17.5],[2022,"R",238888,22.5],[2022,"R",240000,7.5],[2022,"R",207000,22.5],[2022,"R",226000,32.5],[2022,"R",229000,47.5],[2022,"R",233000,37.5],[2022,"R",226000,32.5],[2022,"R",213000,27.5],[2022,"R",240000,7.5],[2022,"R",235000,32.5],[2022,"R",226000,32.5],[2023,"U",194800,67.5]]
+  }
+};
+const THIS_YEAR = 2026;
+const state = { cond: 'all', basis: 'mean', min: 5, excl: true };
+let cur = 'rx300', pending = null;
+let custom = {};
+try { custom = JSON.parse(localStorage.getItem('cd-extra') || '{}'); if (!custom || typeof custom !== 'object' || Array.isArray(custom)) custom = {}; } catch (e) { custom = {}; }
+let remoteCache = {};
+try { remoteCache = JSON.parse(localStorage.getItem('cd-remote') || '{}'); if (!remoteCache || typeof remoteCache !== 'object' || Array.isArray(remoteCache)) remoteCache = {}; } catch (e) { remoteCache = {}; }
+let searchRequest = 0;
+
+//<core>
+function avg(a) { return a.reduce((s, v) => s + v, 0) / a.length; }
+function median(a) { const s = a.slice().sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; }
+function summarize(rows, o) {
+  const by = {};
+  rows.forEach(r => { (by[r[0]] = by[r[0]] || []).push(r); });
+  const years = Object.keys(by).map(Number).sort((a, b) => b - a);
+  const out = [];
+  for (const y of years) {
+    let rs = by[y].filter(r => o.cond === 'all' || r[1] === o.cond);
+    if (!rs.length) continue;
+    const med0 = median(rs.map(r => r[2]));
+    let dropped = 0;
+    if (o.excl) { const k = rs.filter(r => r[2] >= 0.5 * med0 && r[2] <= 1.5 * med0); dropped = rs.length - k.length; rs = k; }
+    const prices = rs.map(r => r[2]);
+    const kms = rs.map(r => r[3]).filter(v => v != null);
+    out.push({ year: y, n: rs.length, dropped, mean: avg(prices), median: median(prices), km: kms.length ? avg(kms) : null });
+  }
+  let prev = null;
+  out.forEach(r => {
+    r.val = o.basis === 'median' ? r.median : r.mean;
+    r.ok = r.n >= o.min;
+    if (r.ok) { if (prev) { r.vs = prev.year; r.d = r.val - prev.val; r.pct = r.val / prev.val - 1; } prev = r; }
+  });
+  return out;
+}
+//</core>
+
+const rm = v => 'RM ' + Math.round(v).toLocaleString('en-US');
+const pc = v => (v > 0 ? '+' : '') + (v * 100).toFixed(1) + '%';
+const $ = id => document.getElementById(id);
+const norm = s => String(s).toLowerCase().replace(/[^a-z0-9]/g, '');
+
+function allModels() {
+  const m = {};
+  Object.keys(BUILTIN).forEach(k => { m[k] = { key: k, label: BUILTIN[k].label, base: BUILTIN[k], rows: BUILTIN[k].rows.concat((custom[k] && custom[k].rows) || [], (remoteCache[k] && remoteCache[k].rows) || []) }; });
+  Object.keys(custom).forEach(k => { if (!m[k]) m[k] = { key: k, label: custom[k].label, base: null, rows: (custom[k].rows || []).concat((remoteCache[k] && remoteCache[k].rows) || []) }; });
+  return m;
+}
+function findModel(q) {
+  const nq = norm(q); if (nq.length < 2) return null;
+  const ms = allModels();
+  for (const k of Object.keys(ms)) {
+    const keys = [norm(ms[k].label), k].concat((ms[k].base && ms[k].base.alias) || []);
+    if (keys.some(x => x.includes(nq) || (x.length >= 4 && nq.includes(x)))) return k;
+  }
+  return null;
+}
+function saveCustom() { try { localStorage.setItem('cd-extra', JSON.stringify(custom)); } catch (e) {} }
+function saveRemote() { try { localStorage.setItem('cd-remote', JSON.stringify(remoteCache)); } catch (e) {} }
+function setSearchStatus(message, isError=false) {
+  const el = $('searchStatus'); if (!el) return;
+  el.textContent = message; el.style.color = isError ? 'var(--loss)' : 'var(--muted)';
+}
+async function fetchModelListings(query, key) {
+  const requestId = ++searchRequest;
+  setSearchStatus('Searching connected Mudah.my listing provider for “' + query + '”…');
+  try {
+    const response = await fetch('/api/listings?model=' + encodeURIComponent(query), { headers: { 'Accept': 'application/json' } });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(payload.error || ('Listing service returned HTTP ' + response.status));
+    const listings = Array.isArray(payload) ? payload : (payload.listings || payload.results || []);
+    const rows = listings.map(item => {
+      const year = Number(item.year ?? item.manufacturedYear ?? item.manufactured_year);
+      const priceRaw = item.price ?? item.priceValue ?? item.price_value;
+      const price = typeof priceRaw === 'number' ? priceRaw : Number(String(priceRaw ?? '').replace(/[^0-9.]/g, ''));
+      const kmRaw = item.mileageKm ?? item.mileage_km ?? item.mileage ?? null;
+      let km = kmRaw == null ? null : Number(String(kmRaw).replace(/[^0-9.]/g, ''));
+      if (km != null && Number.isFinite(km) && km > 1000) km = km / 1000;
+      const c = String(item.condition || item.vehicleCondition || '').toLowerCase();
+      const condition = /recon|unregister|import/.test(c) ? 'R' : (/used|local|registered/.test(c) ? 'U' : '?');
+      if (year >= 2005 && year <= THIS_YEAR && price >= 20000 && price <= 900000) return [year, condition, price, Number.isFinite(km) ? km : null];
+      return null;
+    }).filter(Boolean);
+    if (requestId !== searchRequest) return;
+    if (!rows.length) {
+      setSearchStatus('No usable listings returned for “' + query + '”. You can paste listings manually below.', true);
+      return;
+    }
+    remoteCache[key] = { label: query, rows, fetchedAt: new Date().toISOString() };
+    saveRemote(); cur = key; pending = null; $('q').value = query; render();
+    setSearchStatus('Loaded ' + rows.length + ' listings for ' + query + ' from the connected provider. Cached in this browser.');
+  } catch (error) {
+    if (requestId !== searchRequest) return;
+    setSearchStatus('Automatic search unavailable: ' + error.message + ' Manual paste is still available below.', true);
+  }
+}
+
+
+function render() {
+  const ms = allModels();
+  const m = cur ? ms[cur] : null;
+
+  // chips and suggestions
+  const chips = $('chips'); chips.innerHTML = '<span class="muted">Loaded models:</span>';
+  $('models').innerHTML = '';
+  Object.keys(ms).forEach(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = ms[k].label;
+    b.setAttribute('aria-pressed', String(k === cur));
+    b.addEventListener('click', () => { cur = k; pending = null; $('q').value = ms[k].label; render(); });
+    chips.appendChild(b);
+    const o = document.createElement('option'); o.value = ms[k].label; $('models').appendChild(o);
+  });
+
+  $('results').hidden = !m;
+  $('nodata').hidden = !!m;
+  if (!m) {
+    $('h1').textContent = 'No data yet for ' + (pending || 'this model');
+    $('stamp').textContent = 'Mudah.my';
+    $('ndh').textContent = 'No listings loaded for "' + (pending || '') + '"';
+    $('mlink').href = 'https://www.mudah.my/malaysia/cars-for-sale?q=' + encodeURIComponent(pending || '');
+    $('addh').textContent = 'Add listings for ' + (pending || 'a model');
+    renderNotes(null);
+    return;
+  }
+  $('h1').textContent = m.label + ' depreciation';
+  $('stamp').textContent = 'Mudah.my · ' + m.label + (m.base ? ' · snapshot ' + m.base.snapshot : ' · listings you added');
+  $('addh').textContent = 'Add listings for ' + m.label;
+  renderNotes(m);
+
+  const rows = m.rows;
+  const out = summarize(rows, state);
+  const label = state.basis === 'median' ? 'Median' : 'Average';
+  $('pcol').textContent = label + ' price';
+  $('ctitle').textContent = label + ' asking price by manufacture year';
+
+  const ok = out.filter(r => r.ok);
+  const v = $('verdict');
+  if (ok.length >= 2) {
+    const nw = ok[0], od = ok[ok.length - 1], span = nw.year - od.year;
+    const tot = nw.val - od.val, rate = 1 - Math.pow(od.val / nw.val, 1 / span);
+    v.innerHTML = 'From <b>' + nw.year + '</b> to <b>' + od.year + '</b> the ' + label.toLowerCase() + ' asking price falls <b class="loss">' + rm(tot) + ' (' + (tot / nw.val * 100).toFixed(1) + '%)</b>, about <b class="loss">' + (rate * 100).toFixed(1) + '% for each year of age</b>.';
+  } else {
+    v.textContent = 'Not enough years with ' + state.min + ' or more listings to work out a trend. Lower the minimum, switch the condition filter or add more listings.';
+  }
+
+  const tb = $('tbody'); tb.innerHTML = '';
+  out.forEach(r => {
+    const tr = document.createElement('tr'); if (!r.ok) tr.className = 'few';
+    const total = m.base && m.base.live[r.year];
+    const live = state.cond === 'all' && total ? ' <span class="small muted">of ' + total + ' live</span>' : '';
+    const chg = r.ok && r.d != null
+      ? '<td class="drop">' + (r.d < 0 ? '−' : '+') + rm(Math.abs(r.d)) + (r.vs !== r.year + 1 ? ' <span class="small muted">vs ' + r.vs + '</span>' : '') + '</td><td class="' + (r.pct < 0 ? 'drop' : '') + '">' + pc(r.pct) + '</td>'
+      : '<td class="muted">' + (r.ok ? 'newest year' : '—') + '</td><td class="muted">—</td>';
+    tr.innerHTML = '<td class="yr">' + r.year + (r.ok ? '' : '<span class="tag">too few</span>') + '</td><td>' + (THIS_YEAR - r.year) + ' yr</td><td>' + r.n + live + '</td><td>' + rm(r.val) + '</td><td>' + (r.km != null ? Math.round(r.km) + 'k' : '—') + '</td>' + chg;
+    tb.appendChild(tr);
+  });
+  const dr = out.reduce((s, r) => s + r.dropped, 0);
+  $('tnote').textContent = (state.excl ? dr + ' outlier listing' + (dr === 1 ? '' : 's') + ' left out. ' : 'Outliers are included. ') + 'Change is measured against the next newer year with enough listings.';
+
+  drawChart(out);
+
+  const lb = $('lbody'); lb.innerHTML = '';
+  const byY = {}; rows.forEach(r => { if (state.cond === 'all' || r[1] === state.cond) (byY[r[0]] = byY[r[0]] || []).push(r[2]); });
+  const sorted = rows.filter(r => state.cond === 'all' || r[1] === state.cond).sort((a, b) => b[0] - a[0] || b[2] - a[2]);
+  sorted.forEach(r => {
+    const md = median(byY[r[0]]); const used = !state.excl || (r[2] >= 0.5 * md && r[2] <= 1.5 * md);
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td>' + r[0] + '</td><td>' + ({ U: 'Used', R: 'Recon' }[r[1]] || 'Not stated') + '</td><td class="num">' + rm(r[2]) + '</td><td>' + (r[3] != null ? r[3] + 'k' : '—') + '</td><td>' + (used ? 'Yes' : '<span class="drop">Outlier, left out</span>') + '</td>';
+    lb.appendChild(tr);
+  });
+  $('lsum').textContent = 'All listings in the dataset (' + sorted.length + ')';
+}
+
+function renderNotes(m) {
+  const ul = $('notes'); ul.innerHTML = '';
+  const items = [];
+  if (m && m.base) m.base.notes.forEach(t => items.push(t));
+  items.push('Prices are asking prices, not confirmed transaction prices. The year is the manufacture year shown on the listing.');
+  if (m && remoteCache[m.key]) items.push('Online data retrieved: ' + new Date(remoteCache[m.key].fetchedAt).toLocaleString() + '. Listings may change or disappear; verify individual ads before purchase.');
+  items.push('Recon means imported and unregistered. Used means locally registered. Pasted rows have no type, so they only appear under All.');
+  items.push('Outliers: a price above 1.5 times or below half of that year\'s median is dropped.');
+  items.push('Years with fewer listings than the minimum are shown faded and skipped, so the next older year compares with the last year that has enough listings.');
+  items.forEach(t => { const li = document.createElement('li'); li.textContent = t; ul.appendChild(li); });
+}
+
+function drawChart(out) {
+  const svg = $('chart'); const W = 640, H = 300, L = 54, R = 10, T = 22, B = 56;
+  const data = out.slice().sort((a, b) => a.year - b.year);
+  if (!data.length) { svg.innerHTML = ''; return; }
+  const top = Math.max(50000, Math.ceil(Math.max(...data.map(d => d.val)) * 1.08 / 50000) * 50000);
+  const iw = W - L - R, ih = H - T - B, y = v => T + ih - v / top * ih;
+  let s = '';
+  const step = top > 400000 ? 100000 : 50000;
+  for (let t = 0; t <= top; t += step) {
+    s += '<path class="grid" d="M' + L + ' ' + y(t) + 'H' + (W - R) + '"/><text class="ax" x="' + (L - 8) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + (t / 1000) + 'k</text>';
+  }
+  const slot = iw / data.length, bw = Math.min(64, slot * 0.62);
+  data.forEach((d, i) => {
+    const cx = L + slot * i + slot / 2, h = d.val / top * ih;
+    s += '<rect class="bar' + (d.ok ? '' : ' few') + '" x="' + (cx - bw / 2) + '" y="' + y(d.val) + '" width="' + bw + '" height="' + h + '" rx="2"/>';
+    s += '<text class="val" x="' + cx + '" y="' + (y(d.val) - 6) + '" text-anchor="middle">' + Math.round(d.val / 1000) + 'k</text>';
+    s += '<text class="yr" x="' + cx + '" y="' + (H - 32) + '" text-anchor="middle">' + d.year + '</text>';
+    s += d.ok && d.pct != null
+      ? '<text class="chg" x="' + cx + '" y="' + (H - 15) + '" text-anchor="middle">' + pc(d.pct).replace('-', '−') + '</text>'
+      : '<text class="ax" x="' + cx + '" y="' + (H - 15) + '" text-anchor="middle">' + (d.ok ? 'newest' : 'n=' + d.n) + '</text>';
+  });
+  svg.innerHTML = s;
+}
+
+function setSeg(id, key) {
+  $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    state[key] = b.dataset.v;
+    $(id).querySelectorAll('button').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+    render();
+  });
+}
+setSeg('cond', 'cond'); setSeg('basis', 'basis');
+$('min').addEventListener('input', e => { const n = parseInt(e.target.value, 10); state.min = n > 0 ? n : 1; render(); });
+$('excl').addEventListener('change', e => { state.excl = e.target.checked; render(); });
+
+$('sform').addEventListener('submit', e => {
+  e.preventDefault();
+  const q = $('q').value.trim(); if (!q) return;
+  const existingKey = findModel(q);
+  const key = existingKey || norm(q);
+  if (existingKey) { cur = existingKey; pending = null; $('q').value = allModels()[existingKey].label; }
+  else { cur = null; pending = q; }
+  $('msg').textContent = '';
+  render();
+  fetchModelListings(q, key);
+});
+
+$('add').addEventListener('click', () => {
+  const key = cur || (pending ? norm(pending) : '');
+  if (!key) { $('msg').textContent = 'Search a model first, then add its listings.'; return; }
+  const lines = $('paste').value.split(/\n+/).map(l => l.trim()).filter(Boolean);
+  const rows = []; let skipped = 0;
+  lines.forEach(line => {
+    const nums = (line.match(/\d[\d,]*/g) || []).map(t => parseInt(t.replace(/,/g, ''), 10));
+    const year = nums.find(n => n >= 2005 && n <= THIS_YEAR);
+    const rmm = line.match(/RM\s*([\d,]{5,})/i);
+    const price = rmm ? parseInt(rmm[1].replace(/,/g, ''), 10) : nums.find(n => n >= 20000 && n !== year);
+    if (year && price && price >= 20000 && price <= 900000) rows.push([year, '?', price, null]); else skipped++;
+  });
+  if (rows.length) {
+    const label = cur ? allModels()[cur].label : pending;
+    custom[key] = custom[key] || { label, rows: [] };
+    custom[key].rows = custom[key].rows.concat(rows);
+    saveCustom();
+    if (!cur) { cur = key; pending = null; $('q').value = label; }
+  }
+  $('paste').value = '';
+  $('msg').textContent = rows.length + ' added' + (skipped ? ', ' + skipped + ' skipped (no year or price found)' : '') + '.';
+  render();
+});
+$('clear').addEventListener('click', () => {
+  const key = cur || (pending ? norm(pending) : '');
+  if (key && custom[key]) {
+    if (BUILTIN[key]) { delete custom[key]; } else { pending = custom[key].label; delete custom[key]; cur = null; }
+    saveCustom(); $('msg').textContent = 'Added rows removed.';
+  } else { $('msg').textContent = 'No added rows to remove.'; }
+  render();
+});
+
+render();
+</script>
+
+</body></html>
