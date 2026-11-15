@@ -1,0 +1,9 @@
+{
+  "name": "car-depreciation-tracker",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Search a car model, read Mudah.my asking prices by year, show depreciation.",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
