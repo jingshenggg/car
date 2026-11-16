@@ -4,10 +4,18 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+
+function openBrowser(url) {
+  const cmd = process.platform === 'win32' ? `start "" "${url}"`
+    : process.platform === 'darwin' ? `open "${url}"`
+    : `xdg-open "${url}"`;
+  exec(cmd, () => {});
+}
 
 const BASE = 'https://www.mudah.my';
 const UA = 'Mozilla/5.0 (compatible; personal-depreciation-tracker)';
-const MAX_PAGES_PER_YEAR = 3;          // each Mudah page shows about 40 listings
+const MAX_PAGES_PER_YEAR = 30;         // safety ceiling only; each year stops as soon as a page adds nothing new
 const YEARS_BACK = 14;
 const cache = new Map();               // url -> {t, body}
 const TTL = 30 * 60 * 1000;
@@ -58,20 +66,29 @@ function parseListings(html) {
   return out;
 }
 
+// Pages through one year until a page adds no new listing ids, i.e. we've hit the end.
+async function listingsForYear(base, y) {
+  const seen = new Map();
+  for (let p = 1; p <= MAX_PAGES_PER_YEAR; p++) {
+    let html;
+    try { html = await get(BASE + base + '/mfg-year-' + y + (p > 1 ? '?o=' + p : '')); } catch (e) { break; }
+    const found = parseListings(html).filter(l => l.year === y);
+    const before = seen.size;
+    found.forEach(l => seen.set(l.id, l));
+    if (seen.size === before) break;   // no new listings, this is the last page
+  }
+  return [...seen.values()];
+}
+
 async function listingsFor(query) {
   const { base } = await resolveModel(query);
-  const seen = new Map();
   const thisYear = new Date().getFullYear();
-  for (let y = thisYear; y >= thisYear - YEARS_BACK; y--) {
-    for (let p = 1; p <= MAX_PAGES_PER_YEAR; p++) {
-      let html;
-      try { html = await get(BASE + base + '/mfg-year-' + y + (p > 1 ? '?o=' + p : '')); } catch (e) { break; }
-      const found = parseListings(html).filter(l => l.year === y);
-      const before = seen.size;
-      found.forEach(l => seen.set(l.id, l));
-      if (seen.size === before) break;   // no new listings, stop paging this year
-    }
-  }
+  const years = [];
+  for (let y = thisYear; y >= thisYear - YEARS_BACK; y--) years.push(y);
+  // Years are independent, so fetch them concurrently instead of one at a time.
+  const perYear = await Promise.all(years.map(y => listingsForYear(base, y)));
+  const seen = new Map();
+  perYear.flat().forEach(l => seen.set(l.id, l));
   return [...seen.values()];
 }
 
@@ -94,4 +111,8 @@ http.createServer(async (req, res) => {
     if (err) { res.writeHead(404); res.end('index.html not found'); return; }
     res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' }); res.end(data);
   });
-}).listen(process.env.PORT || 3000, () => console.log('http://localhost:' + (process.env.PORT || 3000)));
+}).listen(process.env.PORT || 3000, () => {
+  const url = 'http://localhost:' + (process.env.PORT || 3000);
+  console.log(url);
+  openBrowser(url);
+});

@@ -419,9 +419,7 @@ setSeg('cond', 'cond'); setSeg('basis', 'basis');
 $('min').addEventListener('input', e => { const n = parseInt(e.target.value, 10); state.min = n > 0 ? n : 1; render(); });
 $('excl').addEventListener('change', e => { state.excl = e.target.checked; render(); });
 
-$('sform').addEventListener('submit', e => {
-  e.preventDefault();
-  const q = $('q').value.trim(); if (!q) return;
+function runSearch(q) {
   const existingKey = findModel(q);
   const key = existingKey || norm(q);
   if (existingKey) { cur = existingKey; pending = null; $('q').value = allModels()[existingKey].label; }
@@ -429,6 +427,20 @@ $('sform').addEventListener('submit', e => {
   $('msg').textContent = '';
   render();
   fetchModelListings(q, key);
+}
+
+let typingTimer = null;
+$('sform').addEventListener('submit', e => {
+  e.preventDefault();
+  clearTimeout(typingTimer);
+  const q = $('q').value.trim(); if (!q) return;
+  runSearch(q);
+});
+$('q').addEventListener('input', e => {
+  clearTimeout(typingTimer);
+  const q = e.target.value.trim();
+  if (q.length < 4 || !/\s/.test(q)) return;  // wait for at least "brand model" before firing
+  typingTimer = setTimeout(() => runSearch(q), 550);
 });
 
 $('add').addEventListener('click', () => {
