@@ -79,6 +79,13 @@ a { color: var(--accent); }
 .chart .val { fill: var(--fg); font-size: 12px; font-weight: 600; font-family: var(--font-body); }
 .chart .yr { fill: var(--fg); font-size: 13px; font-weight: 600; font-family: var(--font-head); }
 .chart .chg { fill: var(--loss); font-size: 11px; font-weight: 600; font-family: var(--font-body); }
+.chart .cline { fill: none; stroke-width: 2.5; }
+.chart .cdot.few { opacity: 0.5; }
+
+.legend { display: flex; flex-wrap: wrap; gap: 14px 20px; font-size: 13px; }
+.legend .li { display: flex; align-items: center; gap: 7px; }
+.legend .sw { width: 11px; height: 11px; border-radius: 3px; flex: none; }
+.legend .rate { color: var(--muted); }
 
 .tablewrap { overflow-x: auto; }
 table { border-collapse: collapse; width: 100%; min-width: 640px; font-variant-numeric: tabular-nums; }
@@ -166,6 +173,21 @@ ul.notes { margin: 0; padding-left: 18px; display: flex; flex-direction: column;
     </details>
   </div>
 
+  <section class="panel" aria-label="Compare models">
+    <h2>Compare models</h2>
+    <p class="small muted">Pick two or more loaded models to overlay their price by manufacture year. Uses the same filters as above. Gaps in a model's own year coverage are bridged directly by the line.</p>
+    <div class="chips" id="compareChips"></div>
+    <p class="small muted" id="compareEmpty" hidden>Select at least one model above to compare.</p>
+    <svg class="chart" id="compareChart" viewBox="0 0 640 300" role="img" aria-label="Average price by year, compared across models" hidden></svg>
+    <div class="legend" id="compareLegend"></div>
+    <div class="tablewrap" id="compareTableWrap" hidden>
+      <table>
+        <thead><tr><th>Model</th><th>Years</th><th>Listings</th><th>Newest avg</th><th>Oldest avg</th><th>Depreciation / yr</th></tr></thead>
+        <tbody id="compareBody"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="panel" aria-label="Add listings">
     <h2 id="addh">Add listings you find</h2>
     <p class="small muted">Copy listing lines from Mudah.my and paste them here, one per line. Each line needs a year and a price, for example <span class="num">2021 Lexus RX300 F Sport RM 205,000</span> or <span class="num">2020 188000</span>. Rows go to the model currently searched and are kept in this browser.</p>
@@ -206,6 +228,14 @@ try { custom = JSON.parse(localStorage.getItem('cd-extra') || '{}'); if (!custom
 let remoteCache = {};
 try { remoteCache = JSON.parse(localStorage.getItem('cd-remote') || '{}'); if (!remoteCache || typeof remoteCache !== 'object' || Array.isArray(remoteCache)) remoteCache = {}; } catch (e) { remoteCache = {}; }
 let searchRequest = 0;
+let compareSet = new Set();
+let compareInitialized = false;
+try {
+  const raw = localStorage.getItem('cd-compare');
+  if (raw != null) { const saved = JSON.parse(raw); if (Array.isArray(saved)) { compareSet = new Set(saved); compareInitialized = true; } }
+} catch (e) {}
+function saveCompareSet() { try { localStorage.setItem('cd-compare', JSON.stringify([...compareSet])); } catch (e) {} }
+const CMP_COLORS = ['#0a6c87', '#b3432b', '#9a6b1f', '#4c6b2f', '#6b4c9a', '#1f7a9a'];
 
 //<core>
 function avg(a) { return a.reduce((s, v) => s + v, 0) / a.length; }
@@ -232,6 +262,12 @@ function summarize(rows, o) {
     if (r.ok) { if (prev) { r.vs = prev.year; r.d = r.val - prev.val; r.pct = r.val / prev.val - 1; } prev = r; }
   });
   return out;
+}
+function trendOf(out) {
+  const ok = out.filter(r => r.ok);
+  if (ok.length < 2) return null;
+  const nw = ok[0], od = ok[ok.length - 1], span = nw.year - od.year;
+  return { nw, od, span, tot: nw.val - od.val, pct: (nw.val - od.val) / nw.val, rate: 1 - Math.pow(od.val / nw.val, 1 / span) };
 }
 //</core>
 
@@ -287,7 +323,9 @@ async function fetchModelListings(query, key) {
       return;
     }
     remoteCache[key] = { label: query, rows, fetchedAt: new Date().toISOString() };
-    saveRemote(); cur = key; pending = null; $('q').value = query; render();
+    saveRemote(); cur = key; pending = null; $('q').value = query;
+    compareSet.add(key); compareInitialized = true; saveCompareSet();
+    render();
     setSearchStatus('Loaded ' + rows.length + ' listings for ' + query + ' from the connected provider. Cached in this browser.');
   } catch (error) {
     if (requestId !== searchRequest) return;
@@ -297,6 +335,7 @@ async function fetchModelListings(query, key) {
 
 
 function render() {
+  renderCompare();
   const ms = allModels();
   const m = cur ? ms[cur] : null;
 
@@ -333,12 +372,10 @@ function render() {
   $('pcol').textContent = label + ' price';
   $('ctitle').textContent = label + ' asking price by manufacture year';
 
-  const ok = out.filter(r => r.ok);
   const v = $('verdict');
-  if (ok.length >= 2) {
-    const nw = ok[0], od = ok[ok.length - 1], span = nw.year - od.year;
-    const tot = nw.val - od.val, rate = 1 - Math.pow(od.val / nw.val, 1 / span);
-    v.innerHTML = 'From <b>' + nw.year + '</b> to <b>' + od.year + '</b> the ' + label.toLowerCase() + ' asking price falls <b class="loss">' + rm(tot) + ' (' + (tot / nw.val * 100).toFixed(1) + '%)</b>, about <b class="loss">' + (rate * 100).toFixed(1) + '% for each year of age</b>.';
+  const trend = trendOf(out);
+  if (trend) {
+    v.innerHTML = 'From <b>' + trend.nw.year + '</b> to <b>' + trend.od.year + '</b> the ' + label.toLowerCase() + ' asking price falls <b class="loss">' + rm(trend.tot) + ' (' + (trend.pct * 100).toFixed(1) + '%)</b>, about <b class="loss">' + (trend.rate * 100).toFixed(1) + '% for each year of age</b>.';
   } else {
     v.textContent = 'Not enough years with ' + state.min + ' or more listings to work out a trend. Lower the minimum, switch the condition filter or add more listings.';
   }
@@ -403,6 +440,85 @@ function drawChart(out) {
     s += d.ok && d.pct != null
       ? '<text class="chg" x="' + cx + '" y="' + (H - 15) + '" text-anchor="middle">' + pc(d.pct).replace('-', '−') + '</text>'
       : '<text class="ax" x="' + cx + '" y="' + (H - 15) + '" text-anchor="middle">' + (d.ok ? 'newest' : 'n=' + d.n) + '</text>';
+  });
+  svg.innerHTML = s;
+}
+
+function renderCompare() {
+  const ms = allModels();
+  const keys = Object.keys(ms);
+  if (!compareInitialized) { if (cur) compareSet.add(cur); compareInitialized = true; }
+  let changed = false;
+  [...compareSet].forEach(k => { if (!ms[k]) { compareSet.delete(k); changed = true; } });
+  if (changed) saveCompareSet();
+
+  const chips = $('compareChips'); chips.innerHTML = '';
+  keys.forEach(k => {
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'chip'; b.textContent = ms[k].label;
+    b.setAttribute('aria-pressed', String(compareSet.has(k)));
+    b.addEventListener('click', () => {
+      if (compareSet.has(k)) compareSet.delete(k); else compareSet.add(k);
+      saveCompareSet(); renderCompare();
+    });
+    chips.appendChild(b);
+  });
+
+  const selected = keys.filter(k => compareSet.has(k));
+  const chartEl = $('compareChart'), legendEl = $('compareLegend'), tableWrap = $('compareTableWrap'), emptyEl = $('compareEmpty');
+  emptyEl.hidden = selected.length > 0;
+  chartEl.hidden = selected.length === 0;
+  tableWrap.hidden = selected.length === 0;
+  if (!selected.length) { chartEl.innerHTML = ''; legendEl.innerHTML = ''; $('compareBody').innerHTML = ''; return; }
+
+  const series = selected.map((k, i) => ({ key: k, label: ms[k].label, color: CMP_COLORS[i % CMP_COLORS.length], out: summarize(ms[k].rows, state) }));
+  drawCompareChart(series);
+
+  legendEl.innerHTML = series.map(s => {
+    const t = trendOf(s.out);
+    const rateTxt = t ? (t.rate * 100).toFixed(1) + '%/yr' : 'not enough data';
+    return '<span class="li"><span class="sw" style="background:' + s.color + '"></span>' + s.label + ' <span class="rate">(' + rateTxt + ')</span></span>';
+  }).join('');
+
+  const tb = $('compareBody'); tb.innerHTML = '';
+  series.forEach(s => {
+    const years = s.out.map(r => r.year);
+    const yrRange = years.length ? (Math.min(...years) + '–' + Math.max(...years)) : '—';
+    const totalN = s.out.reduce((a, r) => a + r.n, 0);
+    const t = trendOf(s.out);
+    const tr = document.createElement('tr');
+    tr.innerHTML = '<td><span class="sw" style="background:' + s.color + ';display:inline-block;margin-right:6px"></span>' + s.label + '</td><td>' + yrRange + '</td><td>' + totalN + '</td>' +
+      (t ? '<td>' + rm(t.nw.val) + '</td><td>' + rm(t.od.val) + '</td><td class="drop">' + (t.rate * 100).toFixed(1) + '%</td>' : '<td class="muted">—</td><td class="muted">—</td><td class="muted">not enough data</td>');
+    tb.appendChild(tr);
+  });
+}
+
+function drawCompareChart(series) {
+  const svg = $('compareChart'); const W = 640, H = 300, L = 54, R = 10, T = 22, B = 30;
+  const allPts = series.flatMap(s => s.out.map(r => ({ year: r.year, val: r.val })));
+  if (!allPts.length) { svg.innerHTML = ''; return; }
+  const minYear = Math.min(...allPts.map(p => p.year)), maxYear = Math.max(...allPts.map(p => p.year));
+  const top = Math.max(50000, Math.ceil(Math.max(...allPts.map(p => p.val)) * 1.08 / 50000) * 50000);
+  const iw = W - L - R, ih = H - T - B;
+  const x = yr => maxYear === minYear ? L + iw / 2 : L + (yr - minYear) / (maxYear - minYear) * iw;
+  const y = v => T + ih - v / top * ih;
+  let s = '';
+  const step = top > 400000 ? 100000 : 50000;
+  for (let t = 0; t <= top; t += step) {
+    s += '<path class="grid" d="M' + L + ' ' + y(t) + 'H' + (W - R) + '"/><text class="ax" x="' + (L - 8) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + (t / 1000) + 'k</text>';
+  }
+  const span = maxYear - minYear, tickEvery = span > 10 ? 2 : 1;
+  for (let yr = minYear; yr <= maxYear; yr++) {
+    if ((maxYear - yr) % tickEvery !== 0 && yr !== minYear && yr !== maxYear) continue;
+    s += '<text class="ax" x="' + x(yr) + '" y="' + (H - 10) + '" text-anchor="middle">' + yr + '</text>';
+  }
+  series.forEach(ser => {
+    const pts = ser.out.slice().sort((a, b) => a.year - b.year);
+    if (!pts.length) return;
+    const d = pts.map((p, i) => (i ? 'L' : 'M') + x(p.year) + ' ' + y(p.val)).join('');
+    s += '<path class="cline" d="' + d + '" stroke="' + ser.color + '"/>';
+    pts.forEach(p => {
+      s += '<circle class="cdot' + (p.ok ? '' : ' few') + '" cx="' + x(p.year) + '" cy="' + y(p.val) + '" r="3.5" fill="' + ser.color + '"/>';
+    });
   });
   svg.innerHTML = s;
 }
